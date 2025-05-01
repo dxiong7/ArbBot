@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 class PolymarketClient:
     def __init__(self, private_key: str):
-        self.host = "https://clob.polymarket.com"
+        self.host = "https://gamma-api.polymarket.com"
         # Ensure private key is properly formatted as hex
         if not private_key.startswith('0x'):
             private_key = f'0x{private_key}'
@@ -71,9 +71,10 @@ class PolymarketClient:
             markets = data if isinstance(data, list) else data.get("markets", data)
             if not isinstance(markets, list):
                 self.logger.error(f"Unexpected response format: {data}")
-                return []
+                return [], None
             self.logger.info(f"Fetched {len(markets)} markets (offset {offset})")
-            return markets
+            next_offset = offset + len(markets) if len(markets) == limit else None
+            return markets, next_offset
         except Exception as e:
             self.logger.error(f"Failed to fetch markets from Gamma Markets API: {e}")
             raise
@@ -105,10 +106,51 @@ class PolymarketClient:
             self.logger.error(f"Failed to fetch market data: {e}")
             raise
             
+    def get_token_ids(self, market_id: str) -> tuple[str, str]:
+        """Get the YES and NO token IDs for a specific market."""
+        try:
+            # First try to get market data from CLOB client
+            # TODO: get_market doesn't return tokens in expected format
+            market_data = self.client.get_market(market_id)
+            print('in get_token_ids: ', market_data)
+            if market_data and 'tokens' in market_data:
+                tokens = market_data['tokens']
+                if len(tokens) >= 2:
+                    return tokens[0]['token_id'], tokens[1]['token_id']
+            
+            # If that fails, try getting from Gamma Markets API
+            self.logger.info('Key tokens not found in market data, falling back to Gamma Markets API')
+            market_data = self.get_market_data(market_id)
+            self.logger.info(f"Market data keys: {market_data.keys() if market_data else 'None'}")
+            
+            # Get token IDs from the market data
+            if market_data and 'clob_token_ids' in market_data:
+                token_ids = market_data['clob_token_ids']
+                if isinstance(token_ids, list) and len(token_ids) >= 2:
+                    return token_ids[0], token_ids[1]
+            
+            raise ValueError(f"Could not find token IDs in market data for market {market_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to get token IDs: {e}")
+            raise
+            
     def get_orderbook(self, market_id: str) -> Dict:
         """Get the order book for a specific market."""
         try:
-            return self.client.get_book(market_id)
+            yes_token_id, no_token_id = self.get_token_ids(market_id)
+            if not yes_token_id or not no_token_id:
+                raise ValueError(f"Could not find token IDs for market {market_id}")
+                
+            # Get orderbooks for both YES and NO tokens
+            orderbooks = self.client.get_order_books([
+                {'token_id': yes_token_id},
+                {'token_id': no_token_id}
+            ])
+            
+            return {
+                'yes': orderbooks.get(yes_token_id, {}),
+                'no': orderbooks.get(no_token_id, {})
+            }
         except Exception as e:
             self.logger.error(f"Failed to fetch orderbook: {e}")
             raise
@@ -143,48 +185,26 @@ class PolymarketClient:
             self.logger.error(f"Failed to cancel order: {e}")
             raise
 
+    # Get markets directly through the CLOB client
     def get_markets_direct(self) -> Dict:
-        """Alternative method to fetch markets using direct HTTP requests."""
+        """Alternative method to fetch markets using the CLOB client's markets endpoint."""
         try:
-            self.logger.info("Fetching active markets directly from Polymarket API...")
+            self.logger.info("Fetching markets from CLOB client...")
             
-            # Use the simplified-markets endpoint which is designed for market discovery
-            url = f"{self.host}/simplified-markets"
-            params = {
-                'active': 'true',
-                'closed': 'false',
-                'archived': 'false',
-                'limit': 100  # Adjust limit as needed
-            }
+            # Use the CLOB client's get_markets method
+            # Pass empty string as next_cursor to get the first page
+            response = self.client.get_markets("")
             
-            # Make the GET request with query parameters
-            response = requests.get(url, params=params)
-            
-            # Check if the request was successful
-            response.raise_for_status()
-            
-            # Parse the JSON response
-            data = response.json()
-            
-            # Log the response structure
-            self.logger.info(f"Response status code: {response.status_code}")
-            self.logger.info(f"Request URL: {response.url}")  # Log the full URL with params
-            self.logger.info(f"Response keys: {data.keys()}")
-            
-            if isinstance(data, dict) and 'data' in data:
-                markets = data['data']
-                self.logger.info(f"Successfully fetched {len(markets)} active markets directly from Polymarket")
+            if isinstance(response, dict) and 'markets' in response:
+                markets = response['markets']
+                self.logger.info(f"Successfully fetched {len(markets)} markets from CLOB client")
                 if markets:
-                    self.logger.info(f"First market structure: {markets[0].keys()}")
-                    self.logger.info(f"First market: {markets[0]}")
+                    self.logger.info(f"First market structure: {list(markets[0].keys())}")
                 return markets
             else:
-                self.logger.error(f"Unexpected response format: {data}")
-                return []
+                self.logger.error(f"Unexpected response format: {response}")
+                raise ValueError("Unexpected response format in get_markets_direct")
                 
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"HTTP request failed: {e}")
-            raise
         except Exception as e:
             self.logger.error(f"Failed to fetch markets: {e}")
-            raise 
+            raise

@@ -97,6 +97,7 @@ class MarketProcessor:
         """
         try:
             processed_markets = self.normalize_kalshi_markets(kalshi_markets)
+            print(f'Got total of {len(processed_markets)} markets from Kalshi')
             processed_markets += self.normalize_polymarket_markets(polymarket_markets)
             self.logger.info(f"\nConverting {len(processed_markets)} total markets to DataFrame")
             df = pd.DataFrame(processed_markets)
@@ -110,9 +111,11 @@ class MarketProcessor:
             raise
 
     def normalize_kalshi_markets(self, kalshi_markets: List[Dict]) -> list:
+        print('Normalizing Kalshi markets...')
         """Process and standardize a list of Kalshi markets (expects a list of dicts)."""
         return [self.process_kalshi_market(m) for m in kalshi_markets if isinstance(m, dict)]
 
     def normalize_polymarket_markets(self, polymarket_markets: List[Dict]) -> list:
+        print('Normalizing Polymarket markets...')
         """Process and standardize a list of Polymarket markets (expects a list of dicts)."""
         return [self.process_polymarket_market(m) for m in polymarket_markets if isinstance(m, dict)]

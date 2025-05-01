@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 
-from main import ArbitrageBot
-from config_ui import setup_configuration
-from config import (
+from .main import ArbitrageBot
+#from config_ui import setup_configuration
+from .config import (
     KALSHI_API_KEY, POLYMARKET_API_KEY,
     CHECK_INTERVAL, SIMILARITY_THRESHOLD, MIN_PROFIT_THRESHOLD,
     LOG_LEVEL, LOG_FILE
@@ -60,9 +60,9 @@ def check_configuration() -> bool:
 def main():
     """Main entry point for the application."""
     try:
-        # Check if configuration exists
-        if not check_configuration():
-            setup_configuration()
+        # # Check if configuration exists
+        # if not check_configuration():
+        #     setup_configuration()
             
         # Start the arbitrage bot
         console.print(Panel("Starting Arbitrage Bot...", style="bold blue"))

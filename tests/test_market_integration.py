@@ -1,6 +1,6 @@
 import unittest
 import logging
-from polymarket_client import PolymarketClient
+from arbbot.polymarket_client import PolymarketClient
 from dotenv import load_dotenv
 import os
 
@@ -27,7 +27,7 @@ class TestMarketIntegration(unittest.TestCase):
         logger.info("Testing market data structure...")
         
         # Test Polymarket market structure
-        poly_markets = self.polymarket_client.get_markets(limit=1)
+        poly_markets, next_offset = self.polymarket_client.get_markets(limit=1)
         self.assertTrue(isinstance(poly_markets, list))
         if poly_markets:
             market = poly_markets[0]
@@ -79,10 +79,12 @@ class TestMarketIntegration(unittest.TestCase):
         logger.info("Testing price data validation...")
         
         # Test Polymarket price validation
-        poly_markets = self.polymarket_client.get_markets(limit=1)
+        poly_markets, next_offset = self.polymarket_client.get_markets(limit=1)
         if poly_markets:
             market = poly_markets[0]
             logger.info(f"Validating Polymarket prices for: {market.get('question', 'N/A')}")
+            self.assertIn('bestBid', market)
+            self.assertIn('bestAsk', market)
             best_bid = market.get('bestBid')
             best_ask = market.get('bestAsk')
             if best_bid is not None:

@@ -8,6 +8,7 @@ load_dotenv()
 
 # Default Configuration Values
 DEFAULT_CONFIG = {
+    'INTERNAL_ONLY_MODE': 'False',
     # API Configuration
     'KALSHI_API_KEY': '',
     'POLYMARKET_PRIVATE_KEY': '',
@@ -28,13 +29,15 @@ DEFAULT_CONFIG = {
 }
 
 def load_kalshi_private_key() -> rsa.RSAPrivateKey:
-    """Load the Kalshi private key from PEM file."""
+    """Load the Kalshi private key from PEM file. Returns None if the file doesn't exist."""
     try:
         with open('kalshi_private_key.pem', 'rb') as key_file:
             return serialization.load_pem_private_key(
                 key_file.read(),
                 password=None
             )
+    except FileNotFoundError:
+        return None
     except Exception as e:
         raise ValueError(f"Failed to load Kalshi private key: {str(e)}")
 
@@ -42,6 +45,9 @@ def load_kalshi_private_key() -> rsa.RSAPrivateKey:
 def get_config(key: str) -> str:
     """Get configuration value, preferring environment variables over defaults."""
     return os.getenv(key, DEFAULT_CONFIG.get(key, ''))
+
+# Internal-only mode for Kalshi arbitrage
+INTERNAL_ONLY_MODE = get_config('INTERNAL_ONLY_MODE').lower() == 'true'
 
 # API Configuration
 KALSHI_API_KEY = get_config('KALSHI_API_KEY')
