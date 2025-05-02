@@ -69,10 +69,10 @@ def test_get_event(client):
     event_ticker = first_event.get('event_ticker')
     if not event_ticker:
         pytest.skip("Event has no event_ticker")
-    event_ticker = 'kxuel'.upper()
+    event_ticker = 'KXAUSTRALIA'.upper()
     logger.info(f"Fetching event with ticker: {event_ticker}")
     event = client.get_event(event_ticker)
-    logger.info(f"Event details: {event}")
+
     logger.info(json.dumps(event, indent=4))
     assert isinstance(event, dict), "Event should be a dictionary"
     assert 'markets' in event, "Event should have markets"

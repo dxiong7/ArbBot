@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     # Logging Configuration
     'LOG_LEVEL': 'INFO',
     'LOG_FILE': 'arbitrage_bot.log',
+    'ARBITRAGE_OUTPUT_FILE': 'arbitrage_opportunities.json',
     
     # API Endpoints
     'KALSHI_BASE_URL': 'https://api.elections.kalshi.com',
@@ -63,6 +64,7 @@ MIN_PROFIT_THRESHOLD = float(get_config('MIN_PROFIT_THRESHOLD'))
 # Logging Configuration
 LOG_LEVEL = get_config('LOG_LEVEL')
 LOG_FILE = get_config('LOG_FILE')
+ARBITRAGE_OUTPUT_FILE = get_config('ARBITRAGE_OUTPUT_FILE')
 
 # API Endpoints
 KALSHI_BASE_URL = get_config('KALSHI_BASE_URL')

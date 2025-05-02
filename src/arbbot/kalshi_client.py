@@ -122,11 +122,10 @@ class KalshiClient:
                 if not markets:
                     continue
                     
-                # Get expiration from first market
-                close_time = markets[0].get('close_time')
+                # Get expiration from first market (prefer expected_expiration_time if exists)
+                close_time = markets[0].get('expected_expiration_time') or markets[0].get('close_time')
                 if not close_time:
                     continue
-
                 event_mutually_exclusive = event.get('mutually_exclusive', False)
                 event_filters = event_mutually_exclusive and close_time <= cutoff_date and len(markets) > 1
                 if event_filters:
