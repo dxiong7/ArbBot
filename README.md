@@ -142,6 +142,23 @@ After configuration, the application will:
 ├── requirements.txt          # Python dependencies
 └── README.md                 
 ```
+
+## Basic Flow
+1. Fetch Kalshi data
+2. Fetch Polymarket data
+3. Normalize data from both platforms into a common format. Sample format:
+    ```
+    {
+        'platform': 'Kalshi',
+        'ticker': 'Will Trump win in 2024?',
+        'yes_price': 0.65,
+        'no_price': 0.32,
+        'raw_market': market
+    }
+    ```
+4. Find matches between events using semantic similarity (TODO)
+5. Print results
+
 ## Limitations
 
 - Market matching is based on simple string matching and may miss some opportunities

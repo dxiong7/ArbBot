@@ -90,7 +90,7 @@ class KalshiClient:
         return response.json()
 
     # Gets all multi-leg mutually exclusive events
-    def get_all_multileg_exclusive_events(self, batch_size: int = 200, max_expiry_months: int = 4) -> list:
+    def get_all_multileg_exclusive_events(self, batch_size: int = 200, max_expiry_months: int = 2) -> list:
         """Retrieve all available events from Kalshi using pagination.
         
         Args:

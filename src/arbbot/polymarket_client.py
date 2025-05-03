@@ -1,7 +1,8 @@
 import os
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import logging
+from datetime import timedelta
 from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import ApiCreds
 from py_clob_client.constants import POLYGON
@@ -12,6 +13,8 @@ from datetime import datetime, timezone
 class PolymarketClient:
     def __init__(self, private_key: str):
         self.host = "https://gamma-api.polymarket.com"
+        self.clob_endpoint = "https://clob.polymarket.com"
+        self.gamma_endpoint = "https://gamma-api.polymarket.com"
         # Ensure private key is properly formatted as hex
         if not private_key.startswith('0x'):
             private_key = f'0x{private_key}'
@@ -54,7 +57,7 @@ class PolymarketClient:
         """
         try:
             self.logger.info(f"Fetching markets from Gamma Markets API (page offset {offset})...")
-            base_url = "https://gamma-api.polymarket.com/markets"
+            base_url = self.gamma_endpoint + "/markets"
             active_only_val = "false"
             if active_only:
                 active_only_val = "true"
@@ -68,15 +71,40 @@ class PolymarketClient:
             resp = requests.get(base_url, params=params)
             resp.raise_for_status()
             data = resp.json()
-            markets = data if isinstance(data, list) else data.get("markets", data)
+            markets = data
             if not isinstance(markets, list):
                 self.logger.error(f"Unexpected response format: {data}")
-                return [], None
+                raise ValueError(f"Unexpected response format: {data}")
             self.logger.info(f"Fetched {len(markets)} markets (offset {offset})")
             next_offset = offset + len(markets) if len(markets) == limit else None
             return markets, next_offset
         except Exception as e:
             self.logger.error(f"Failed to fetch markets from Gamma Markets API: {e}")
+            raise
+
+    def get_events(self, active_only=True, limit=100):
+        """Get all events from the Polymarket Gamma Markets API."""
+        try:
+            self.logger.info("Fetching events from Gamma Markets API...")
+            max_expiry_date = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            min_expiry_date = (datetime.now(timezone.utc) + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.logger.info(f"Fetching events with min_expiry_date: {min_expiry_date}, max_expiry_date: {max_expiry_date}")
+            query_params = {
+                "limit": limit,
+                "offset": 0,
+                "closed": "false",
+                "archived": "false",
+                "active": "true",
+                "end_date_min": min_expiry_date,
+                "end_date_max": max_expiry_date
+            }
+            resp = requests.get(self.gamma_endpoint + "/events", params=query_params)
+            resp.raise_for_status()
+            events = resp.json()
+            self.logger.info(f"Fetched {len(events)} events")
+            return events
+        except Exception as e:
+            self.logger.error(f"Failed to fetch events from Gamma Markets API: {e}")
             raise
 
     def iter_markets(self, active_only=True, limit=100):
@@ -105,34 +133,65 @@ class PolymarketClient:
         except Exception as e:
             self.logger.error(f"Failed to fetch market data: {e}")
             raise
+    
+    def get_single_event(self, event_id: str) -> Dict:
+        """Get detailed information about a specific event."""
+        try:
+            return self.client.get_event(event_id)
+        except Exception as e:
+            self.logger.error(f"Failed to fetch event data: {e}")
+            raise
             
-    def get_token_ids(self, market_id: str) -> tuple[str, str]:
-        """Get the YES and NO token IDs for a specific market."""
+    def get_token_ids(self, market_id: int) -> Tuple[Optional[str], Optional[str]]:
+        """Retrieve YES and NO token IDs for a given market ID."""
         try:
             # First try to get market data from CLOB client
-            # TODO: get_market doesn't return tokens in expected format
-            market_data = self.client.get_market(market_id)
-            print('in get_token_ids: ', market_data)
-            if market_data and 'tokens' in market_data:
-                tokens = market_data['tokens']
-                if len(tokens) >= 2:
-                    return tokens[0]['token_id'], tokens[1]['token_id']
-            
-            # If that fails, try getting from Gamma Markets API
-            self.logger.info('Key tokens not found in market data, falling back to Gamma Markets API')
-            market_data = self.get_market_data(market_id)
-            self.logger.info(f"Market data keys: {market_data.keys() if market_data else 'None'}")
-            
-            # Get token IDs from the market data
-            if market_data and 'clob_token_ids' in market_data:
-                token_ids = market_data['clob_token_ids']
-                if isinstance(token_ids, list) and len(token_ids) >= 2:
-                    return token_ids[0], token_ids[1]
-            
-            raise ValueError(f"Could not find token IDs in market data for market {market_id}")
+            # TODO: Update if get_market structure changes
+            market_data_clob = self.client.get_market(market_id)
+            # self.logger.debug(f'CLOB get_market response for {market_id}: {market_data_clob}') # Optional detailed logging
+            if market_data_clob and 'tokens' in market_data_clob:
+                tokens = market_data_clob['tokens']
+                if isinstance(tokens, list) and len(tokens) >= 2:
+                    # Assuming order is consistent (e.g., Yes then No)
+                    # Might need more robust logic if order isn't guaranteed
+                    self.logger.info(f"Found token IDs via CLOB client for market {market_id}")
+                    return tokens[0].get('token_id'), tokens[1].get('token_id')
+                else:
+                    self.logger.warning(f"CLOB client returned 'tokens' but not in expected list format for market {market_id}: {tokens}")
+            else:
+                 self.logger.info(f"Token IDs not found via CLOB client for market {market_id}. Falling back to Gamma API.")
+
         except Exception as e:
-            self.logger.error(f"Failed to get token IDs: {e}")
-            raise
+            self.logger.warning(f"Error fetching from CLOB get_market for {market_id}, falling back to Gamma API: {e}")
+
+        # Fallback: Try getting from Gamma Markets API
+        try:
+            market_data_gamma = self.get_market_data(market_id)
+            # self.logger.debug(f"Gamma get_market_data response for {market_id}: {market_data_gamma}") # Optional detailed logging
+            
+            if market_data_gamma and 'clob_token_ids' in market_data_gamma:
+                token_ids = market_data_gamma['clob_token_ids']
+                if isinstance(token_ids, list) and len(token_ids) >= 2:
+                    self.logger.info(f"Found token IDs via Gamma API for market {market_id}")
+                    return token_ids[0], token_ids[1]
+                else:
+                    self.logger.warning(f"Gamma API returned 'clob_token_ids' but not in expected list format for market {market_id}: {token_ids}")
+            else:
+                # Log why token IDs might be missing
+                enable_order_book = market_data_gamma.get('enableOrderBook', 'N/A') if market_data_gamma else 'N/A'
+                self.logger.warning(f"'clob_token_ids' key not found in Gamma API response for market {market_id}. enableOrderBook={enable_order_book}")
+                # If order book is explicitly disabled, don't raise error, return None
+                if enable_order_book is False:
+                     self.logger.info(f"Order book disabled for market {market_id}, returning None for token IDs.")
+                     return None, None
+
+        except Exception as e:
+             self.logger.error(f"Error fetching from Gamma get_market_data for {market_id}: {e}")
+
+        # If neither method worked and order book wasn't explicitly disabled
+        error_msg = f"Could not find token IDs for market {market_id} via CLOB or Gamma API."
+        self.logger.error(error_msg)
+        raise ValueError(error_msg)
             
     def get_orderbook(self, market_id: str) -> Dict:
         """Get the order book for a specific market."""
