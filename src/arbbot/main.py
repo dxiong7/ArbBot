@@ -18,6 +18,7 @@ from .config import (
     CHECK_INTERVAL, SIMILARITY_THRESHOLD, MIN_PROFIT_THRESHOLD,
     LOG_LEVEL, LOG_FILE, INTERNAL_ONLY_MODE, ARBITRAGE_OUTPUT_FILE
 )
+from .kalshi_internal_arb import KalshiInternalArbitrageFinder
 
 # Configure logging
 logging.basicConfig(
@@ -72,6 +73,9 @@ class ArbitrageBot:
         # Initialize event filtering statistics
         self.reset_filtering_stats()
         
+        # Instantiate the internal finder
+        self.internal_arb_finder = KalshiInternalArbitrageFinder(output_file=ARBITRAGE_OUTPUT_FILE)
+
     def fetch_market_data(self) -> pd.DataFrame:
         """Fetch and process market data from both platforms as lists of dicts."""
         try:
@@ -604,58 +608,30 @@ class ArbitrageBot:
         
         while True:
             try:
-                # Fetch all suitable events from Kalshi
-                kalshi_events = self.kalshi_client.get_all_multileg_exclusive_events()
-                logger.info(f"Fetched total of {len(kalshi_events)} suitable Kalshi events.")
-                
-                # Reset filtering stats at the beginning of each run
-                self.reset_filtering_stats()
-                
-                # Process each event
-                arb_found = False
-                for event in kalshi_events:
-                    print()
-                    if self._process_event_markets(event, curr_time):
-                        arb_found = True
-                        self.events_with_arbitrage += 1
-                
-                # If we found new arbitrage opportunities, show the updated summary
-                if arb_found:
-                    console.print("\n[bold green]New arbitrage opportunities found! Updated summary:[/bold green]")
-                    self._summarize_arbitrage_opportunities()
-                
-                # Display statistics about filtered events
-                console.print("\n[bold blue]Event Processing Statistics:[/bold blue]")
-                table = Table(show_header=True, header_style="bold")
-                table.add_column("Metric")
-                table.add_column("Count")
-                table.add_column("Percentage")
-                
-                total = self.total_events_processed
-                if total > 0:
-                    table.add_row("Total events processed", str(total), "100.0%")
-                    table.add_row("Events with arbitrage", str(self.events_with_arbitrage), 
-                                 f"{(self.events_with_arbitrage / total * 100):.1f}%")
-                    table.add_row("Skipped - No markets", str(self.skipped_events_due_to_no_markets), 
-                                 f"{(self.skipped_events_due_to_no_markets / total * 100):.1f}%")
-                    table.add_row("Skipped - No volume", str(self.skipped_events_due_to_volume), 
-                                 f"{(self.skipped_events_due_to_volume / total * 100):.1f}%")
-                    table.add_row("Skipped - Dominant market", str(self.skipped_events_due_to_dominant_market), 
-                                 f"{(self.skipped_events_due_to_dominant_market / total * 100):.1f}%")
+                logger.info("Fetching Kalshi events for internal analysis...")
+                # Use the original method as requested
+                events = self.kalshi_client.get_all_multileg_exclusive_events()
+                logger.info(f"Fetched {len(events)} suitable Kalshi events.")
+
+                if not events:
+                    logger.warning("No suitable open events found from Kalshi.")
                 else:
-                    table.add_row("No events processed", "", "")
-                
-                console.print(table)
-                
-            except KeyboardInterrupt:
+                    # Delegate processing to the specialized finder
+                    self.internal_arb_finder.find_opportunities(events)
+
+            except KeyboardInterrupt: # Restore KeyboardInterrupt handling
                 console.print(Panel("Shutting down Kalshi Internal-Only Mode...", style="bold red"))
                 break
             except Exception as e:
-                logger.error(f"Error in internal-only mode: {e}")
-                traceback.print_exc()
-                raise e
-            else:
-                return
+                logger.error(f"An error occurred in the main loop: {e}", exc_info=True)
+                console.print(Panel(f"An error occurred: {e}. Check logs.", style="bold red"))
+                # Decide if we should break or continue on other errors
+                # For now, let's break on general errors too, like KeyboardInterrupt
+                break
+
+            # Original logic didn't explicitly support 'continuous' flag here, it ran once or until error/interrupt.
+            logger.info("Internal analysis run complete.") # Adjusted message
+            break # Exit after one successful pass or error
 
     def run(self) -> None:
         """Main application loop."""
