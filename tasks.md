@@ -1,35 +1,57 @@
-1. Implement fetching the ask prices for arb calculation
-To implement the true arbitrage logic, we need the ask prices (yes_ask, no_ask from Kalshi; bestAsk from Polymarket allows deriving both Yes/No asks) in addition to the bid prices. Our current normalization only includes bid prices. enhance the normalization process (_process_... methods) and the normalized structure to include ask prices to enable the more accurate arbitrage logic
+# Arbitrage Bot - Task List
 
-2. Finding 'equivalent' events across Kalshi and Polymarket
-a) Combined Matching Strategy (e.g., Fuzzy Title + Expiration Time) using the current normalized data?
-Market Matching Strategies:
-- fuzzy match between subtitles
+## Core Functionality & Data Aggregation
+- [x] Fetch basic market data (bid prices) from Kalshi and Polymarket.
+- [x] Implement initial normalization logic.
+- [ ] Implement fetching/normalization of **ask prices** (Kalshi: `yes_ask`, `no_ask`; Polymarket: `bestAsk`). *(Partially Done)*
+- [ ] Fix Kalshi fetching and calculation of best ask prices (its calculating wrong atm)
+- [ ] Filter out markets that are close to resolved (99% or 1%)
+- [ ] Refine arbitrage calculation logic in `_find_arbitrage_opportunities` to use ask prices. *(Partially Done)*
+- [ ] Extendable interface for adding future market platforms (Myriad, Hedgehog, PredictIt, etc.).
+- [ ] Modularize code for better reusability: generic interfaces for fetchers, matchers, notifiers (Separate concerns).
 
-3. Expiration time matching
-- compare expiration times of the markets
+## Market Matching Engine
+- [ ] Implement core matching logic combining:
+    - [x] **Fuzzy title/question matching** using `thefuzz`.
+    - [ ] Fix market matching logic between Polymarket/Kalshi (its checking across markets, but we should check across events)
+    - [ ] **Expiration time matching** as a secondary filter.
+        - [ ] Parse Kalshi `expiration_time` / `close_time`.
+        - [ ] Parse Polymarket `endDate`.
+        - [ ] Compare timestamps within a defined tolerance (e.g., same day).
+    - [ ] **Semantic similarity matching** using embeddings with 'sentence-transformers' and all-MiniLM-L6-v2
+    - [ ] Develop confidence scoring for match candidates.
+    - [ ] Explore if we can use **category/tag matching**.
+- [ ] Store match candidates in DB
 
-4. Category/Tag matching
-- compare categories of the markets
+## Arbitrage Detection Engine
+- [ ] Implement logic to poll matched market groups (read from DB)
+- [ ] Develop core arbitrage calculation (checking if combined prices < 1).
+- [ ] (Optional) Factor in fees and liquidity constraints.
 
-TODO:
-Semantic Matching (Advanced): Use sentence embeddings (e.g., via sentence-transformers). Convert titles/questions into vectors. Calculate cosine similarity between vectors. Matches are pairs with high cosine similarity (e.g., > 0.9). Best for understanding semantic equivalence even with different phrasing, but computationally more intensive.
-Pros: Much more likely to find real matches based on the market's meaning.
-Cons: Requires careful text normalization. Fuzzy/semantic methods require tuning (thresholds) and can have false positives/negatives.
+## Notifications & Alerts
+- [ ] Set up notification system (e.g., Discord, Telegram, or ntfy).
+- [ ] Implement alerts for identified arbitrage opportunities, including key details (markets, profit, links).
 
-Expiration Time Matching:
-How: Compare kalshi_market['raw_market']['expiration_time'] (or close_time) with polymarket_market['raw_market']['endDate'].
-Implementation: Parse both timestamps into comparable objects (e.g., Python datetime). Match markets where expiration times are identical or very close (within a tolerance like +/- 1 hour or +/- 1 day).
-Pros: Uses an objective, structured data point.
-Cons: Not sufficient on its own. Many unrelated markets might expire simultaneously. Best used as a secondary filter to confirm potential matches found via Title/Question matching.
-Category/Tag Matching:
-How: Compare kalshi_market['raw_market']['category'] (often from the parent event) with Polymarket tags (if available in the /events market summaries or by fetching /events/{id}).
-Pros: Can help narrow the search space.
-Cons: Categories can be broad or inconsistent. Unlikely to be sufficient alone. Best as an optional filtering step.
-Recommended Matching Approach:
+## Server
+- [ ] Deploy app (Render.com background worker, EC2/Docker, Railway.app, Replit Deployments, etc.)
+- [ ] Set up Supabase
+- [ ] Connect to Supabase db
 
-A Combined Strategy is likely best:
+## Testing & Refinement
+- [ ] Testing fuzzy string matching.
+- [ ] Add/update unit tests for new normalization logic (ask prices).
+- [ ] Add/update unit tests for expiration time matching.
+- [ ] Run end-to-end tests to verify arbitrage opportunities identified with ask prices and combined matching.
+- [ ] Tune fuzzy matching similarity threshold based on test results.
+- [ ] Tune expiration time tolerance based on test results.
+- [ ] Develop unit and integration tests for *all* key components (fetching, matching, arbitrage calculation).
 
-Primary Match: Use Title/Question Matching. Start with Fuzzy Matching due to its balance of simplicity and robustness. If results are poor, consider investing in Semantic Matching. Generate candidate pairs that exceed the similarity threshold.
-Secondary Filter: For each candidate pair from step 1, check if their Expiration Times are within a reasonable tolerance (e.g., same day). This helps eliminate pairs that are clearly different events despite similar titles.
-Match Confirmation: Pairs passing both steps are considered "equivalent" markets.
+## Documentation
+- [ ] Update `README.md` with details on the ask price implementation and refined matching strategy.
+- [ ] Ensure code comments are clear and up-to-date.
+
+## 🧠 Backlog / Future Features
+- [ ] Implement Human-in-the-Loop Verification:
+    - [ ] Set up interactive notifier via Discord bot to allow users to verify matching candidates.
+    - [ ] Store matched groups in local JSON/DB.
+- [ ] Implement notifications via POST requests to NTFY.
